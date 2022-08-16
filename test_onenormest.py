@@ -4,10 +4,7 @@ import jax.numpy as jnp
 import scipy
 import numpy as np
 from numpy.testing import assert_, assert_equal, assert_allclose
-
-# TESTS:
-
-# TODO {CPU, GPU, scipy} Performance comparison tests
+import pytest
 
 class TestOnenormest:
     def test_onenormest_table_3_t_2(self):
@@ -167,3 +164,142 @@ class TestOnenormest:
         assert((s2 == s3).all())
         assert((v == v2).all())
         assert((w == w2).all())
+
+class TestBenchmark:
+    pass
+
+test_cases = [
+    # JAX cpu
+    {
+        't': 2,
+        'n': 100,
+        'itmax': 5,
+        'device': 'cpu',
+        'lib': 'jax',
+        'nsamples': 5000,
+    },
+    {
+        't': 7,
+        'n': 100,
+        'itmax': 5,
+        'device': 'cpu',
+        'lib': 'jax',
+        'nsamples': 5000,
+    },
+    {
+        't': 16,
+        'n': 2048,
+        'itmax': 8,
+        'device': 'cpu',
+        'lib': 'jax',
+        'nsamples': 10,
+    },
+    {
+        't': 128,
+        'n': 2048,
+        'itmax': 32,
+        'device': 'cpu',
+        'lib': 'jax',
+        'nsamples': 10,
+    },
+    {
+        't': 128,
+        'n': 4096,
+        'itmax': 32,
+        'device': 'cpu',
+        'lib': 'jax',
+        'nsamples': 10,
+    },
+
+    # TODO JAX GPU
+
+    # scipy
+    {
+        't': 2,
+        'n': 100,
+        'itmax': 5,
+        'lib': 'scipy',
+        'nsamples': 5000,
+    },
+    {
+        't': 7,
+        'n': 100,
+        'itmax': 5,
+        'lib': 'scipy',
+        'nsamples': 5000,
+    },
+    {
+        't': 16,
+        'n': 2048,
+        'itmax': 8,
+        'lib': 'scipy',
+        'nsamples': 10,
+    },
+    {
+        't': 128,
+        'n': 2048,
+        'itmax': 32,
+        'lib': 'scipy',
+        'nsamples': 10,
+    },
+    {
+        't': 128,
+        'n': 4096,
+        'itmax': 32,
+        'lib': 'scipy',
+        'nsamples': 10,
+    },
+]
+
+# do not set device when running on scipy
+def make_test_case(*args, t, n, itmax, lib, nsamples, device=None):
+    name = f"test_onenormest_n_{n}_t_{t}_itmax_{itmax}_{lib}"
+
+    if device:
+        name = f"{name}_{device}"
+
+    key = jax.random.PRNGKey(0)
+    keys_matrices = []
+
+    for key in jax.random.split(key, nsamples):
+        key, subkey = jax.random.split(key)
+        matrix = jax.random.normal(subkey, (n, n))
+        if lib == 'scipy':
+            matrix = np.array(matrix)
+        keys_matrices.append((key, matrix))
+
+    keys_matrices_idx = 0
+
+    def func_to_benchmark():
+        nonlocal keys_matrices_idx
+
+        key, matrix = keys_matrices[keys_matrices_idx]
+
+        if lib == 'jax':
+            est, *_ = _onenormest(key, matrix, t, itmax)
+            est.block_until_ready()
+        elif lib == 'scipy':
+            scipy.sparse.linalg.onenormest(matrix)
+        else:
+            assert(False)
+
+        keys_matrices_idx += 1
+
+    @pytest.mark.benchmark(
+        disable_gc=True
+    )
+    def func(cls, benchmark):
+        if lib == 'jax':
+            # Jit the function
+            key, matrix = keys_matrices[0]
+            _onenormest(key, matrix, t, itmax)
+
+        benchmark.pedantic(func_to_benchmark, rounds=nsamples, iterations=1)
+
+    return name, func
+
+for test_case in test_cases:
+    name, func = make_test_case(**test_case)
+    setattr(TestBenchmark, name, func)
+
+        
