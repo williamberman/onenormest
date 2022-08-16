@@ -3,7 +3,7 @@ import jax
 import jax.numpy as jnp
 import scipy
 import numpy as np
-from numpy.testing import assert_, assert_equal
+from numpy.testing import assert_, assert_equal, assert_allclose
 
 # TESTS:
 
@@ -88,3 +88,22 @@ class TestOnenormest:
 
         # check the average number of matrix*vector multiplications
         assert_(3.5 < np.mean(nmult_list) < 4.5)
+
+    def test_onenormest_table_5_t_1(self):
+        key = jax.random.PRNGKey(0)
+        t = 1
+        n = 100
+        itmax = 5
+        alpha = 1 - 1e-6
+        A = -scipy.linalg.inv(np.identity(n) + alpha*np.eye(n, k=1))
+        first_col = np.array([1] + [0]*(n-1))
+        first_row = np.array([(-alpha)**i for i in range(n)])
+        B = -scipy.linalg.toeplitz(first_col, first_row)
+        assert_allclose(A, B)
+        B = jnp.array(B)
+        est, v, w, nmults, nresamples = _onenormest(key, B, t, itmax)
+        exact_value = jnp.linalg.norm(B, 1)
+        underest_ratio = est / exact_value
+        assert_allclose(underest_ratio, 0.05, rtol=1e-4)
+        assert_equal(int(nmults), 11)
+        assert_equal(int(nresamples), 0)
