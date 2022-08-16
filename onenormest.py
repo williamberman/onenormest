@@ -149,7 +149,7 @@ def _onenormest(key, A, t, itmax):
         w = loop_state.w
         ind_best = loop_state.ind_best
         key = loop_state.key
-        
+
         Y = A @ X
         nmults += 1
         
@@ -518,8 +518,12 @@ def _onenormest_ind_not_in_ind_hist(ind_tmp, ind_hist, n, t):
             ind_tmp_idx
         )
 
-        # If all values in ind_tmp have already been used, set the sentinel value n in ind
-        value_for_ind = lax.cond(ind_tmp_idx == n, lambda: n, lambda: ind_tmp[ind_tmp_idx])
+        value_for_ind, ind_tmp_idx = lax.cond(
+            # If all values in ind_tmp have already been used, set the sentinel value n in ind
+            ind_tmp_idx == n, 
+            lambda: (n, ind_tmp_idx), 
+            lambda: (ind_tmp[ind_tmp_idx], ind_tmp_idx + 1)
+        )
 
         ind = ind.at[ind_idx].set(value_for_ind)
 
