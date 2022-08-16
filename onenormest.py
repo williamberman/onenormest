@@ -107,10 +107,14 @@ def _onenormest(key, A, t, itmax):
     est = float(0)
     
     ind = jnp.zeros((t,), dtype=int)
+
+    # Explicitly set type to handle when given complex matrices.
+    # Type promotion to handle if given type of int
+    xtype = jnp.promote_types(A.dtype, jnp.dtype('float32'))
     
-    S = jnp.zeros((n, t))
+    S = jnp.zeros((n, t)).astype(xtype)
     
-    w = jnp.zeros((n,))
+    w = jnp.zeros((n,)).astype(xtype)
     
     ind_best = 0
     
