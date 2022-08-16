@@ -5,6 +5,9 @@ import scipy
 import numpy as np
 from numpy.testing import assert_, assert_equal, assert_allclose
 import pytest
+import random
+
+random.seed(0)
 
 class TestOnenormest:
     def test_onenormest_table_3_t_2(self):
@@ -176,7 +179,6 @@ test_cases = [
         'itmax': 5,
         'device': 'cpu',
         'lib': 'jax',
-        'nsamples': 5000,
     },
     {
         't': 7,
@@ -184,7 +186,6 @@ test_cases = [
         'itmax': 5,
         'device': 'cpu',
         'lib': 'jax',
-        'nsamples': 5000,
     },
     {
         't': 16,
@@ -192,7 +193,6 @@ test_cases = [
         'itmax': 8,
         'device': 'cpu',
         'lib': 'jax',
-        'nsamples': 10,
     },
     {
         't': 128,
@@ -200,7 +200,6 @@ test_cases = [
         'itmax': 32,
         'device': 'cpu',
         'lib': 'jax',
-        'nsamples': 10,
     },
     {
         't': 128,
@@ -208,11 +207,43 @@ test_cases = [
         'itmax': 32,
         'device': 'cpu',
         'lib': 'jax',
-        'nsamples': 10,
     },
 
-    # TODO JAX GPU
-    # Use jax.default_device
+    {
+        't': 2,
+        'n': 100,
+        'itmax': 5,
+        'device': 'gpu',
+        'lib': 'jax',
+    },
+    {
+        't': 7,
+        'n': 100,
+        'itmax': 5,
+        'device': 'gpu',
+        'lib': 'jax',
+    },
+    {
+        't': 16,
+        'n': 2048,
+        'itmax': 8,
+        'device': 'gpu',
+        'lib': 'jax',
+    },
+    {
+        't': 128,
+        'n': 2048,
+        'itmax': 32,
+        'device': 'gpu',
+        'lib': 'jax',
+    },
+    {
+        't': 128,
+        'n': 4096,
+        'itmax': 32,
+        'device': 'gpu',
+        'lib': 'jax',
+    },
 
     # scipy
     {
@@ -220,83 +251,75 @@ test_cases = [
         'n': 100,
         'itmax': 5,
         'lib': 'scipy',
-        'nsamples': 5000,
     },
     {
         't': 7,
         'n': 100,
         'itmax': 5,
         'lib': 'scipy',
-        'nsamples': 5000,
     },
     {
         't': 16,
         'n': 2048,
         'itmax': 8,
         'lib': 'scipy',
-        'nsamples': 10,
     },
     {
         't': 128,
         'n': 2048,
         'itmax': 32,
         'lib': 'scipy',
-        'nsamples': 10,
     },
     {
         't': 128,
         'n': 4096,
         'itmax': 32,
         'lib': 'scipy',
-        'nsamples': 10,
     },
 ]
 
 # do not set device when running on scipy
-def make_test_case(*args, t, n, itmax, lib, nsamples, device=None):
+def make_test_case(*args, t, n, itmax, lib, device=None):
     name = f"test_onenormest_n_{n}_t_{t}_itmax_{itmax}_{lib}"
 
     if device:
         name = f"{name}_{device}"
 
-    key = jax.random.PRNGKey(0)
-    keys_matrices = []
-
-    for key in jax.random.split(key, nsamples):
+    def args():
+        key = jax.random.PRNGKey(random.randint(0, 2*n))
         key, subkey = jax.random.split(key)
-        matrix = jax.random.normal(subkey, (n, n))
-        if lib == 'scipy':
-            matrix = np.array(matrix)
-        keys_matrices.append((key, matrix))
-
-    keys_matrices_idx = 0
-
-    def func_to_benchmark():
-        nonlocal keys_matrices_idx
-
-        key, matrix = keys_matrices[keys_matrices_idx]
-
-        if lib == 'jax':
-            est, *_ = _onenormest(key, matrix, t, itmax)
-            est.block_until_ready()
-        elif lib == 'scipy':
-            scipy.sparse.linalg.onenormest(matrix)
+        A = jax.random.normal(subkey, (n, n))
+        return key, A
+        
+    if lib == 'jax':
+        if device == 'gpu' and jax.devices()[0].platform != 'gpu':
+            @pytest.mark.skip(reason="gpu not available")
+            def func(_cls, _benchmark):
+                pass
         else:
-            assert(False)
+            def func_to_benchmark():
+                key, A = args()
+                est, *_ = _onenormest(key, A, t, itmax)
+                est.block_until_ready()
 
-        keys_matrices_idx += 1
+            def func(cls, benchmark):
+                with jax.default_device(jax.devices(device)[0]):
+                    # Compile the function
+                    key, A = args()
+                    est, *_ = _onenormest(key, A, t, itmax)
+                    est.block_until_ready()
 
-    @pytest.mark.benchmark(
-        disable_gc=True
-    )
-    def func(cls, benchmark):
-        if lib == 'jax':
-            # Jit the function
-            key, matrix = keys_matrices[0]
-            est, *_ = _onenormest(key, matrix, t, itmax)
-            est.block_until_ready()
+                    benchmark(func_to_benchmark)
+    elif lib == 'scipy':
+        def func_to_benchmark():
+            _key, A = args()
+            A = np.array(A)
+            scipy.sparse.linalg.onenormest(A)
 
-        benchmark.pedantic(func_to_benchmark, rounds=nsamples, iterations=1)
+        def func(cls, benchmark):
+            benchmark(func_to_benchmark)
+    else:
+        assert(False)
 
     return name, func
 
