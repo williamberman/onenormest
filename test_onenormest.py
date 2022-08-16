@@ -64,7 +64,8 @@ class TestOnenormest:
         nmult_list = []
         nresample_list = []
         for key in jax.random.split(key, nsamples):
-            A = np.random.randint(-1, 2, size=(n, n))
+            key, subkey = jax.random.split(key, 2)
+            A = jax.random.randint(subkey, (n, n), -1, 2)
             est, v, w, nmults, nresamples = _onenormest(key, A, t, itmax)
             observed.append(est)
             expected.append(jnp.linalg.norm(A, 1))
@@ -107,3 +108,45 @@ class TestOnenormest:
         assert_allclose(underest_ratio, 0.05, rtol=1e-4)
         assert_equal(int(nmults), 11)
         assert_equal(int(nresamples), 0)
+
+    # TODO(will) - this causes a type error in jax
+    def test_onenormest_table_6_t_1(self):
+        key = jax.random.PRNGKey(0)
+        t = 1
+        n = 100
+        itmax = 5
+        nsamples = 5000
+        observed = []
+        expected = []
+        nmult_list = []
+        nresample_list = []
+        for key in jax.random.split(key, nsamples):
+            key, key1, key2 = jax.random.split(key, 3)
+            A_inv = jax.random.normal(key1, (n, n)) + 1j * jax.random.normal(key1, (n, n))
+            A = jnp.linalg.inv(A_inv)
+            est, v, w, nmults, nresamples = _onenormest(key, A, t, itmax)
+            observed.append(est)
+            expected.append(jnp.linalg.norm(A, ord=1))
+            nmult_list.append(nmults)
+            nresample_list.append(nresamples)
+        observed = np.array(observed, dtype=float)
+        expected = np.array(expected, dtype=float)
+        relative_errors = np.abs(observed - expected) / expected
+
+        # check the mean underestimation ratio
+        underestimation_ratio = observed / expected
+        underestimation_ratio_mean = np.mean(underestimation_ratio)
+        assert_(0.90 < underestimation_ratio_mean < 0.99)
+
+        # check the required column resamples
+        max_nresamples = np.max(nresample_list)
+        assert_equal(max_nresamples, 0)
+
+        # check the proportion of norms computed exactly correctly
+        nexact = np.count_nonzero(relative_errors < 1e-14)
+        proportion_exact = nexact / float(nsamples)
+        assert_(0.7 < proportion_exact < 0.8)
+
+        # check the average number of matrix*vector multiplications
+        mean_nmult = np.mean(nmult_list)
+        assert_(4 < mean_nmult < 5)
