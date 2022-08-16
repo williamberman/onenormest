@@ -150,3 +150,23 @@ class TestOnenormest:
         # check the average number of matrix*vector multiplications
         mean_nmult = np.mean(nmult_list)
         assert_(4 < mean_nmult < 5)
+
+    
+    def test_returns(self):
+        key = jax.random.PRNGKey(0)
+        key, subkey = jax.random.split(key)
+        A = jnp.linalg.inv(jax.random.normal(subkey, (50, 50)))
+
+        s0 = jnp.linalg.norm(A, 1)
+        s1, v = onenormest(key, A, compute_v=True)
+        s2, w = onenormest(key, A, compute_w=True)
+        s3, v2, w2 = onenormest(key, A, compute_w=True, compute_v=True)
+
+        assert_allclose(s1, s0, rtol=1e-5)
+        assert_allclose(np.linalg.norm(A.dot(v), 1), s0*np.linalg.norm(v, 1), rtol=1e-5)
+        assert_allclose(A.dot(v), w, rtol=1e-5)
+
+        assert((s1 == s2).all())
+        assert((s2 == s3).all())
+        assert((v == v2).all())
+        assert((w == w2).all())
