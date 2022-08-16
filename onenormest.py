@@ -252,7 +252,6 @@ def _onenormest(key, A, t, itmax):
                             jnp.logical_and(t > 1, _onenormest_check_ind_in_ind_hist(ind_tmp, ind_hist, t)),
                             lambda: _OnenormestLoopState(break_flag=True, k=k, ind_hist=ind_hist, est_old=est_old, est=est, ind=ind, S=S_, X=X, nmults=nmults_, nresamples=nresamples_, w=w, ind_best=ind_best, key=key_),
                             cont5
-                            
                         )
 
                     
@@ -498,36 +497,52 @@ def _onenormest_S_needs_resampling(v, S, S_old, n):
 # end"
 def _onenormest_check_ind_in_ind_hist(ind_tmp, ind_hist, t):
     ind_t = ind_tmp[0:t]
-    mask =  ind_hist[ind_t] == 1
+    mask = ind_hist[ind_t] == 1
     return jnp.all(mask)
+
 
 def _onenormest_ind_not_in_ind_hist(ind_tmp, ind_hist, n, t):
     """
-    "Replace ind(1:t) by the first t indices in ind(1: n) that are
+    "Replace ind(1:t) by the first t indices in ind(1:n) that are
     not in ind_hist."
     """
-    ind_not_in_hist = ind_hist[ind_tmp] == 0
-    
-    # n is used as sentinel for when ind's size should be smaller than t
-    # The sentinel value will set a zero vector in X
-    sentinels = jnp.empty_like(ind_tmp).at[:].set(n)
-    
-    ind_tmp = jnp.where(ind_not_in_hist, ind_tmp, sentinels)
-    
-    # moves sentinels to end of array -- since n is larger than all other
-    # elementary vector dimensions
-    ind_tmp = ind_tmp.sort()
-    
-    # we only need the first t elements
-    ind = ind_tmp[:t]
+    ind = jnp.empty((t,), dtype=int)
+
+    def populate_ind(ind_idx, args):
+        ind, ind_tmp_idx = args
+
+        # Find the index in ind_tmp that has not been already used
+        ind_tmp_idx = lax.while_loop(
+            lambda ind_tmp_idx: jnp.logical_and(ind_tmp_idx < n, ind_hist[ind_tmp[ind_tmp_idx]] == 1),
+            lambda ind_tmp_idx: ind_tmp_idx + 1,
+            ind_tmp_idx
+        )
+
+        # If all values in ind_tmp have already been used, set the sentinel value n in ind
+        value_for_ind = lax.cond(ind_tmp_idx == n, lambda: n, lambda: ind_tmp[ind_tmp_idx])
+
+        ind = ind.at[ind_idx].set(value_for_ind)
+
+        return ind, ind_tmp_idx
+        
+
+    ind, _ind_tmp_idx = lax.fori_loop(
+        0,
+        t,
+        populate_ind,
+        # ind, ind_tmp_idx
+        (ind, 0)
+    )
     
     return ind
+
 
 def _onenormest_elementary_vector_with_lookup(n, i, ind):
     """
     e_{ind[i]}
     """
     return _onenormest_elementary_vector(n, ind[i])
+
 
 def _onenormest_elementary_vector(n, i):
     """
@@ -537,6 +552,7 @@ def _onenormest_elementary_vector(n, i):
     v = jnp.zeros(n, dtype=float)
     v = lax.cond(i == n, lambda: v, lambda: v.at[i].set(1))
     return v
+
 
 # Batches i to return a matrix (n, len(i)) with column elementary vectors
 _onenormest_elementary_vectors_with_lookup = vmap(_onenormest_elementary_vector_with_lookup, in_axes=(None, 0, None), out_axes=1)
