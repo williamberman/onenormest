@@ -212,6 +212,7 @@ test_cases = [
     },
 
     # TODO JAX GPU
+    # Use jax.default_device
 
     # scipy
     {
@@ -292,7 +293,8 @@ def make_test_case(*args, t, n, itmax, lib, nsamples, device=None):
         if lib == 'jax':
             # Jit the function
             key, matrix = keys_matrices[0]
-            _onenormest(key, matrix, t, itmax)
+            est, *_ = _onenormest(key, matrix, t, itmax)
+            est.block_until_ready()
 
         benchmark.pedantic(func_to_benchmark, rounds=nsamples, iterations=1)
 
