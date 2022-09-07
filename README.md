@@ -27,6 +27,3 @@ The main loop has many conditional early breaks. We handle this by manual contin
 In the scipy implementation and Higham, `ind_hist` is a growable array that stores indices of the used unit vectors. In the octave implementation, `ind_hist` is a fixed sized array that writes 1 into index `j` when `e_j` is used.
 
 `ind` is shape `(n,)` in Higham but only the first `t` values are read out of it. The first `t` values are read for writing to `ind_hist` and it is read out of with column indices of `Y` which is shape `(n, t)`. Because we only test elementary vectors a single time, it is not guaranteed we'll have `t` elementary vectors to test on each loop. We handle this by filling non used elements of `ind` with a sentinel value `n`. `n` will be used to fill a column in `X` with the zero vector instead of an elementary vector. These zero vectors will cause norm estimations of 0 which are always a correct underestimation of  the one norm. Note that because ind can have the additional sentinel value of `n`, `ind_hist` must be extended to length `n + 1`. Noting in `ind_hist` that the sentinel value has been used has no effect.
-
-To implement in jax, the main loop body does manual continuation
-
