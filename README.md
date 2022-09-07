@@ -8,7 +8,7 @@ The implementation passes the scipy test suite with some minor relaxations, i.e.
 
 ## Benchmarks
 
-Some basic benchmarks using a GPU on the Google Colab free tier, see ~8x improvement from the scipy CPU implementation.
+Some basic benchmarks using a GPU on the Google Colab free tier see ~8x improvement from the scipy CPU implementation for 4096x4096 matrices.
 
 ![benchmarks](./onenormest_benchmark.png)
 
