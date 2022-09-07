@@ -1,0 +1,11 @@
+name: onenormest
+channels:
+  - conda-forge
+  - defaults
+dependencies:
+  - python=3.9
+  - jax
+  - scipy
+  - numpy
+  - pytest
+  - pytest-benchmark
